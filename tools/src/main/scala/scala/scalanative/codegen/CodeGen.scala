@@ -2,7 +2,7 @@ package scala.scalanative
 package codegen
 
 import java.{lang => jl}
-import java.nio.file.Paths
+import java.nio.file.{Path, Paths}
 import scala.collection.mutable
 import scala.scalanative.util.ShowBuilder.FileShowBuilder
 import scalanative.util.{Scope, ShowBuilder, partitionBy, procs, unsupported}
@@ -15,7 +15,7 @@ import scalanative.build.ScalaNative.dumpDefns
 object CodeGen {
 
   /** Lower and generate code for given assembly. */
-  def apply(config: build.Config, linked: linker.Result): Unit = {
+  def apply(config: build.Config, linked: linker.Result): Seq[Path] = {
     val defns   = linked.defns
     val proxies = GenerateReflectiveProxies(linked.dynimpls, defns)
 
@@ -42,8 +42,7 @@ object CodeGen {
   }
 
   /** Generate code for given assembly. */
-  private def emit(config: build.Config, assembly: Seq[Defn])(
-      implicit meta: Metadata): Unit =
+  private def emit(config: build.Config, assembly: Seq[Defn])(implicit meta: Metadata): Seq[Path] =
     Scope { implicit in =>
       val env     = assembly.map(defn => defn.name -> defn).toMap
       val workdir = VirtualDirectory.real(config.workdir)
@@ -51,21 +50,22 @@ object CodeGen {
       // Partition into multiple LLVM IR files proportional to number
       // of available processesors. This prevents LLVM from optimizing
       // across IR module boundary unless LTO is turned on.
-      def separate(): Unit =
-        partitionBy(assembly, procs)(_.name.top.mangle).par.foreach {
+      def separate(): Seq[Path] = {
+        partitionBy(assembly, procs)(_.name.top.mangle).par.map {
           case (id, defns) =>
             val sorted = defns.sortBy(_.name.show)
-            new Impl(config.targetTriple, env, sorted)
+            new Impl(env, sorted)
               .gen(id.toString, workdir)
-        }
+        }.seq.toSeq
+      }
 
       // Generate a single LLVM IR file for the whole application.
       // This is an adhoc form of LTO. We use it in release mode if
       // Clang's LTO is not available.
-      def single(): Unit = {
+      def single(): Seq[Path] = {
         val sorted = assembly.sortBy(_.name.show)
-        new Impl(config.targetTriple, env, sorted)
-          .gen(id = "out", workdir)
+        Seq(new Impl(env, sorted)
+          .gen(id = "out", workdir))
       }
 
       (config.mode, config.LTO) match {
@@ -75,8 +75,7 @@ object CodeGen {
       }
     }
 
-  private final class Impl(targetTriple: String,
-                           env: Map[Global, Defn],
+  private final class Impl(env: Map[Global, Defn],
                            defns: Seq[Defn])(implicit meta: Metadata) {
     import Impl._
 
@@ -88,19 +87,20 @@ object CodeGen {
     private val generated        = mutable.Set.empty[String]
     private val externSigMembers = mutable.Map.empty[Sig, Global.Member]
 
-    def gen(id: String, dir: VirtualDirectory): Unit = {
+    def gen(id: String, dir: VirtualDirectory): Path = {
       val body = dir.write(Paths.get(s"$id-body.ll")) { writer =>
         genDefns(defns)(new FileShowBuilder(writer))
       }
 
-      val headers = dir.write(Paths.get(s"$id.ll")) { writer =>
+      val generated = dir.write(Paths.get(s"$id.ll")) { writer =>
         implicit val sb: ShowBuilder = new FileShowBuilder(writer)
         genPrelude()
         genConsts()
         genDeps()
       }
 
-      dir.merge(Seq(body), headers)
+      dir.merge(Seq(body), generated)
+      generated
     }
 
     def genDeps()(implicit sb: ShowBuilder): Unit = deps.foreach { n =>
@@ -165,12 +165,6 @@ object CodeGen {
 
     def genPrelude()(implicit sb: ShowBuilder): Unit = {
       import sb._
-      if (targetTriple.nonEmpty) {
-        str("target triple = \"")
-        str(targetTriple)
-        str("\"")
-        newline()
-      }
       line("declare i32 @llvm.eh.typeid.for(i8*)")
       line("declare i32 @__gxx_personality_v0(...)")
       line("declare i8* @__cxa_begin_catch(i8*)")

@@ -62,21 +62,21 @@ object Build {
     val optimized = ScalaNative.optimize(fconfig, linked)
 
     IO.getAll(workdir, "glob:**.ll").foreach(Files.delete)
-    ScalaNative.codegen(fconfig, optimized)
-    val generated = IO.getAll(workdir, "glob:**.ll")
+    val generated = ScalaNative.codegen(fconfig, optimized)
 
     val nativelibs   = NativeLib.findNativeLibs(fconfig.classPath, workdir)
     val nativelib    = NativeLib.findNativeLib(nativelibs)
-    val unpackedLibs = nativelibs.map(LLVM.unpackNativeCode(_))
+    val unpackedLibs = nativelibs.map(LLVM.unpackNativeCode)
 
     val objectFiles = config.logger.time("Compiling to native code") {
       val nativelibConfig =
         fconfig.withCompilerConfig(
           _.withCompileOptions("-O2" +: fconfig.compileOptions))
-      LLVM.compileNativelibs(nativelibConfig, linked, unpackedLibs, nativelib)
-      LLVM.compile(fconfig, generated)
+      val libsObjectFiles = LLVM.compileNativelibs(nativelibConfig, linked, unpackedLibs, nativelib)
+      val appObjectFiles = LLVM.compile(fconfig, generated)
+      libsObjectFiles ++ appObjectFiles
     }
 
-    LLVM.link(config, linked, objectFiles, unpackedLibs, outpath)
+    LLVM.link(config, linked, objectFiles, outpath)
   }
 }
