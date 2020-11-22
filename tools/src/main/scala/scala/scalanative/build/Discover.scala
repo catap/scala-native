@@ -78,17 +78,22 @@ object Discover {
       throw new BuildException("Failed to detect native target.")
 
     IO.write(targetc, "int probe;".getBytes("UTF-8"))
+    println(s"[compilec] ${compilec.mkString(" ")}")
     val exit = Process(compilec, workdir.toFile).!
     if (exit != 0) {
       fail
     } else {
       val linesIter = Files.readAllLines(targetll).iterator()
-      while (linesIter.hasNext()) {
+      var target: String = null
+      while (linesIter.hasNext) {
         val line = linesIter.next()
+        println(s"[targetll] $line")
         if (line.startsWith("target triple"))
-          return line.split("\"").apply(1)
+          target = line.split("\"").apply(1)
       }
-      fail
+      if (target == null)
+        fail
+      target
     }
   }
 
