@@ -85,12 +85,12 @@ private[scalanative] object LLVM {
    * @param linkerResult  The results from the linker.
    * @param nativelibPath The generated location of the Scala Native nativelib.
    * @param nativelibs    The Paths to the native libs
-   * @return `libPath`    The nativelibPath plus `scala-native`
+   * @return              The paths to produced '.o' files
    */
   def compileNativelibs(config: Config,
                         linkerResult: linker.Result,
                         nativelibs: Seq[Path],
-                        nativelibPath: Path): Path = {
+                        nativelibPath: Path): Seq[Path] = {
     val workdir = config.workdir
     // search starting at workdir `native` to find
     // code across all native component libraries
@@ -131,25 +131,30 @@ private[scalanative] object LLVM {
     }
 
     // generate .o files for all included source files in parallel
-    paths.par.foreach { path =>
-      val opath = path + oExt
-      if (include(path) && !Files.exists(Paths.get(opath))) {
-        val isCpp    = path.endsWith(cppExt)
-        val compiler = if (isCpp) config.clangPP.abs else config.clang.abs
-        val stdflag  = if (isCpp) "-std=c++11" else "-std=gnu11"
-        val flags    = stdflag +: "-fvisibility=hidden" +: config.compileOptions
-        val compilec =
-          Seq(compiler) ++ flto(config) ++ flags ++ Seq("-c", path, "-o", opath)
+    paths
+      .filter(include)
+      .par
+      .map { path =>
+        val opath = path + oExt
+        if (!Files.exists(Paths.get(opath))) {
+          val isCpp    = path.endsWith(cppExt)
+          val compiler = if (isCpp) config.clangPP.abs else config.clang.abs
+          val stdflag  = if (isCpp) "-std=c++11" else "-std=gnu11"
+          val flags = clangOptions(
+            config,
+            Seq(stdflag, "-fvisibility=hidden") ++ config.compileOptions)
+          val compilec = Seq(compiler) ++ flags ++ Seq("-c", path, "-o", opath)
 
-        config.logger.running(compilec)
-        val result = Process(compilec, config.workdir.toFile) ! Logger
-          .toProcessLogger(config.logger)
-        if (result != 0) {
-          sys.error("Failed to compile native library runtime code.")
+          config.logger.running(compilec)
+          val result = Process(compilec, config.workdir.toFile) ! Logger
+            .toProcessLogger(config.logger)
+          if (result != 0) {
+            sys.error("Failed to compile native library runtime code.")
+          }
         }
+        Paths.get(opath)
       }
-    }
-    libPath
+      .seq
   }
 
   /** Compile the given LL files to object files */
@@ -160,24 +165,21 @@ private[scalanative] object LLVM {
         case Mode.ReleaseFast => "-O2"
         case Mode.ReleaseFull => "-O3"
       }
-    val opts = optimizationOpt +: config.compileOptions
 
-    llPaths.par
-      .map { ll =>
-        val apppath = ll.abs
-        val outpath = apppath + ".o"
-        val compile =
-          Seq(config.clang.abs) ++ flto(config) ++ Seq("-c",
-                                                       apppath,
-                                                       "-o",
-                                                       outpath) ++ opts
-        config.logger.running(compile)
-        Process(compile, config.workdir.toFile) ! Logger.toProcessLogger(
-          config.logger)
-        Paths.get(outpath)
-      }
-      .seq
-      .toSeq
+    val flags =
+      clangOptions(config, config.compileOptions ++ Seq(optimizationOpt))
+
+    llPaths.par.map { ll =>
+      val apppath = ll.abs
+      val outpath = apppath + oExt
+      val compile =
+        Seq(config.clang.abs) ++ flags ++ Seq("-c", apppath, "-o", outpath)
+
+      config.logger.running(compile)
+      Process(compile, config.workdir.toFile) ! Logger.toProcessLogger(
+        config.logger)
+      Paths.get(outpath)
+    }.seq
   }
 
   /**
@@ -194,10 +196,8 @@ private[scalanative] object LLVM {
    */
   def link(config: Config,
            linkerResult: linker.Result,
-           llPaths: Seq[Path],
-           nativelibs: Seq[Path],
+           objectFiles: Seq[Path],
            outpath: Path): Path = {
-    val workdir = config.workdir
     val links = {
       val srclinks = linkerResult.links.map(_.name)
       val gclinks  = config.gc.links
@@ -206,14 +206,12 @@ private[scalanative] object LLVM {
       // * libpthread for process APIs and parallel garbage collection.
       "pthread" +: "dl" +: srclinks ++: gclinks
     }
-    val linkopts    = config.linkingOptions ++ links.map("-l" + _)
-    val targetopt   = Seq("-target", config.targetTriple)
-    val flags       = flto(config) ++ Seq("-rdynamic", "-o", outpath.abs) ++ targetopt
-    val objPatterns = NativeLib.destObjPatterns(workdir, nativelibs)
-    val opaths      = IO.getAll(workdir, objPatterns).map(_.abs)
-    val paths       = llPaths.map(_.abs) ++ opaths
-    val compile     = config.clangPP.abs +: (flags ++ paths ++ linkopts)
-    val ltoName     = lto(config).getOrElse("none")
+    val linkopts = config.linkingOptions ++ links.map("-l" + _)
+    val flags    = clangOptions(config, Seq("-rdynamic"))
+    val paths    = objectFiles.map(_.abs)
+    val compile =
+      Seq(config.clangPP.abs) ++ flags ++ Seq("-o", outpath.abs) ++ paths ++ linkopts
+    val ltoName = lto(config).getOrElse("none")
 
     config.logger.time(
       s"Linking native code (${config.gc.name} gc, $ltoName lto)") {
@@ -235,4 +233,7 @@ private[scalanative] object LLVM {
     lto(config).fold[Seq[String]] {
       Seq()
     } { name => Seq(s"-flto=$name") }
+
+  private def clangOptions(config: Config, opts: Seq[String]): Seq[String] =
+    flto(config) ++ opts ++ Seq("-Wno-override-module")
 }
