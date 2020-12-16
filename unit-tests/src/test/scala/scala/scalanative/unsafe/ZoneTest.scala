@@ -63,5 +63,6 @@ class ZoneTest {
     zone.close()
 
     assertThrows(classOf[IllegalStateException], zone.alloc(64 * sizeof[Int]))
+    assertThrows(classOf[IllegalStateException], zone.close())
   }
 }
