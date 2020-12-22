@@ -6,10 +6,10 @@ import scalanative.runtime.{libc, RawPtr, fromRawPtr}
 
 /** Zone allocator which manages memory allocations. */
 @implicitNotFound("Given method requires an implicit zone.")
-trait Zone {
+trait Zone extends AutoCloseable {
 
   /** Allocates memory of given size. */
-  def alloc(size: CSize): Ptr[Byte]
+  private[unsafe] def alloc(size: CSize): Ptr[Byte]
 
   /** Frees allocations. This zone allocator is not reusable once closed. */
   def close(): Unit
@@ -54,6 +54,7 @@ object Zone {
       if (rawptr == null) {
         throw new OutOfMemoryError(s"Unable to allocate $size bytes")
       }
+      libc.memset(rawptr, 0, size)
       node = new Node(rawptr, node)
       fromRawPtr[Byte](rawptr)
     }
