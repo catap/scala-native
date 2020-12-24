@@ -35,4 +35,6 @@ object signal {
   def SIGTERM: CInt = extern
   @name("scalanative_libc_sigusr1")
   def SIGUSR1: CInt = extern
+  @name("scalanative_libc_sigusr2")
+  def SIGUSR2: CInt = extern
 }

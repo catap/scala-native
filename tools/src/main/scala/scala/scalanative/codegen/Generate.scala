@@ -4,6 +4,7 @@ package codegen
 import scala.collection.mutable
 import scala.scalanative.nir._
 import scala.scalanative.linker.Class
+import scala.scalanative.nir.Type.Ref
 
 object Generate {
   import Impl._
@@ -129,7 +130,7 @@ object Generate {
       val argc    = Val.Local(fresh(), Type.Int)
       val argv    = Val.Local(fresh(), Type.Ptr)
       val module  = Val.Local(fresh(), Type.Ref(entry.top))
-      val rt      = Val.Local(fresh(), Runtime)
+      val rt      = Val.Local(fresh(), RuntimeEnvironment)
       val arr     = Val.Local(fresh(), ObjectArray)
       val exc     = Val.Local(fresh(), nir.Rt.Object)
       val handler = fresh()
@@ -161,13 +162,18 @@ object Generate {
                                Seq()),
                        unwind)
           } ++ Seq(
-          Inst.Let(rt.name, Op.Module(Runtime.name), unwind),
+          Inst.Let(rt.name, Op.Module(RuntimeEnvironment.name), unwind),
           Inst.Let(arr.name,
-                   Op.Call(RuntimeInitSig, RuntimeInit, Seq(rt, argc, argv)),
+                   Op.Call(RuntimeEnvironmentInitSig,
+                           RuntimeEnvironmentInit,
+                           Seq(rt, argc, argv)),
                    unwind),
           Inst.Let(module.name, Op.Module(entry.top), unwind),
           Inst.Let(Op.Call(entryMainTy, entryMain, Seq(module, arr)), unwind),
-          Inst.Let(Op.Call(RuntimeLoopSig, RuntimeLoop, Seq(module)), unwind),
+          Inst.Let(Op.Call(RuntimeEnvironmentLoopSig,
+                           RuntimeEnvironmentLoop,
+                           Seq(module)),
+                   unwind),
           Inst.Ret(Val.Int(0)),
           Inst.Label(handler, Seq(exc)),
           Inst.Let(Op.Call(PrintStackTraceSig, PrintStackTrace, Seq(exc)),
@@ -330,21 +336,22 @@ object Generate {
     val ObjectArray =
       Type.Ref(Global.Top("scala.scalanative.runtime.ObjectArray"))
 
-    val Runtime =
-      Rt.Runtime
-    val RuntimeInitSig =
-      Type.Function(Seq(Runtime, Type.Int, Type.Ptr), ObjectArray)
-    val RuntimeInitName =
-      Runtime.name.member(
+    val RuntimeEnvironment =
+      Rt.RuntimeEnvironment
+    val RuntimeEnvironmentInitSig =
+      Type.Function(Seq(RuntimeEnvironment, Type.Int, Type.Ptr),
+                    Type.Array(Rt.String))
+    val RuntimeEnvironmentInitName =
+      RuntimeEnvironment.name.member(
         Sig.Method("init", Seq(Type.Int, Type.Ptr, Type.Array(Rt.String))))
-    val RuntimeInit =
-      Val.Global(RuntimeInitName, Type.Ptr)
-    val RuntimeLoopSig =
-      Type.Function(Seq(Runtime), Type.Unit)
-    val RuntimeLoopName =
-      Runtime.name.member(Sig.Method("loop", Seq(Type.Unit)))
-    val RuntimeLoop =
-      Val.Global(RuntimeLoopName, Type.Ptr)
+    val RuntimeEnvironmentInit =
+      Val.Global(RuntimeEnvironmentInitName, Type.Ptr)
+    val RuntimeEnvironmentLoopSig =
+      Type.Function(Seq(RuntimeEnvironment), Type.Unit)
+    val RuntimeEnvironmentLoopName =
+      RuntimeEnvironment.name.member(Sig.Method("loop", Seq(Type.Unit)))
+    val RuntimeEnvironmentLoop =
+      Val.Global(RuntimeEnvironmentLoopName, Type.Ptr)
 
     val MainName = extern("main")
     val MainSig  = Type.Function(Seq(Type.Int, Type.Ptr), Type.Int)
@@ -376,8 +383,8 @@ object Generate {
 
   val depends =
     Seq(ObjectArray.name,
-        Runtime.name,
-        RuntimeInit.name,
-        RuntimeLoop.name,
+        RuntimeEnvironment.name,
+        RuntimeEnvironmentInit.name,
+        RuntimeEnvironmentLoop.name,
         PrintStackTraceName)
 }

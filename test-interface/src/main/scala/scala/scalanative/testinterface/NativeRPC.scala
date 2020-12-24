@@ -33,7 +33,6 @@ private[testinterface] class NativeRPC(clientSocket: Socket) extends RPCCore {
       else {
         val msg = Array.fill(msgLength)(inStream.readChar).mkString
         handleMessage(msg)
-        scalanative.runtime.loop()
         false
       }
     }

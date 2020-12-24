@@ -405,6 +405,7 @@ lazy val sbtScalaNative =
             nativelib / publishLocal,
             clib / publishLocal,
             posixlib / publishLocal,
+            runtime / publishLocal,
             javalib / publishLocal,
             auxlib / publishLocal,
             scalalib / publishLocal,
@@ -448,6 +449,16 @@ lazy val posixlib =
     .settings(mavenPublishSettings)
     .dependsOn(nscplugin % "plugin", nativelib)
 
+lazy val runtime =
+  project
+    .in(file("runtime"))
+    .enablePlugins(MyScalaNativePlugin)
+    .settings(mavenPublishSettings)
+    .settings(
+      exportJars := true
+    )
+    .dependsOn(nscplugin % "plugin", nativelib, posixlib, clib)
+
 lazy val javalib =
   project
     .in(file("javalib"))
@@ -476,7 +487,10 @@ lazy val javalib =
       },
       exportJars := true
     )
-    .dependsOn(nscplugin % "plugin", posixlib, clib)
+    .settings(
+      scalacOptions -= "-Xfatal-warnings"
+    ) // required for Thread.scala and ThreadGroup.scala
+    .dependsOn(nscplugin % "plugin", posixlib, clib, runtime)
 
 val fetchScalaSource =
   taskKey[File]("Fetches the scala source for the current scala version")
@@ -638,7 +652,7 @@ lazy val scalalib =
       },
       exportJars := true
     )
-    .dependsOn(nscplugin % "plugin", auxlib, nativelib, javalib)
+    .dependsOn(nscplugin % "plugin", auxlib, nativelib, javalib, runtime)
 
 // Shortcut for further Native projects to depend on all core libraries
 lazy val allCoreLibs: Project =

@@ -49,38 +49,11 @@ package object runtime {
     Intrinsics.loadRawPtr(rawptr)
   }
 
-  /** Get monitor for given object. */
-  @alwaysinline def getMonitor(obj: Object): Monitor = Monitor.dummy
-
-  /** Initialize runtime with given arguments and return the
-   *  rest as Java-style array.
-   */
-  def init(argc: Int, rawargv: RawPtr): scala.Array[String] = {
-    val argv = fromRawPtr[CString](rawargv)
-    val args = new scala.Array[String](argc - 1)
-
-    // skip the executable name in argv(0)
-    var c = 0
-    while (c < argc - 1) {
-      // use the default Charset (UTF_8 atm)
-      args(c) = fromCString(argv(c + 1))
-      c += 1
-    }
-
-    args
-  }
-
   @alwaysinline def fromRawPtr[T](rawptr: RawPtr): Ptr[T] =
     Boxes.boxToPtr(rawptr)
 
   @alwaysinline def toRawPtr[T](ptr: Ptr[T]): RawPtr =
     Boxes.unboxToPtr(ptr)
-
-  /** Run the runtime's event loop. The method is called from the
-   *  generated C-style after the application's main method terminates.
-   */
-  @noinline def loop(): Unit =
-    ExecutionContext.loop()
 
   /** Called by the generated code in case of division by zero. */
   @noinline def throwDivisionByZero(): Nothing =
