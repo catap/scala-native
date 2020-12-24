@@ -15,14 +15,12 @@ import scala.scalanative.runtime.libc.malloc
 import scala.scalanative.unsafe.{Ptr, stackalloc}
 
 final class PosixMonitor private[runtime] (shadow: Boolean) {
-  // memory leak
-  // TODO destroy the mutex and release the memory
   private val mutexPtr =
-    fromRawPtr[pthread_mutex_t](malloc(pthread_mutex_t_size))
+    fromRawPtr[pthread_mutex_t](Intrinsics.stackalloc(pthread_mutex_t_size))
   pthread_mutex_init(mutexPtr, PosixMonitor.mutexAttrPtr)
-  // memory leak
-  // TODO destroy the condition and release the memory
-  private val condPtr = fromRawPtr[pthread_cond_t](malloc(pthread_cond_t_size))
+
+  private val condPtr =
+    fromRawPtr[pthread_cond_t](Intrinsics.stackalloc(pthread_cond_t_size))
   pthread_cond_init(condPtr, PosixMonitor.condAttrPtr)
 
   def _notify(): Unit    = pthread_cond_signal(condPtr)
