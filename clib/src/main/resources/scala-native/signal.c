@@ -21,3 +21,5 @@ int scalanative_sigsegv() { return SIGSEGV; }
 int scalanative_sigterm() { return SIGTERM; }
 
 int scalanative_sigusr1() { return SIGUSR1; }
+
+int scalanative_sigusr2() { return SIGUSR2; }

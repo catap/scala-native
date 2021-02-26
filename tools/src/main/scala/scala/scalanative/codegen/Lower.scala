@@ -36,7 +36,7 @@ object Lower {
     private val stringFieldNames = {
       val node  = ClassRef.unapply(StringName).get
       val names = layout(node).entries.map(_.name)
-      assert(names.length == 4, "java.lang.String is expected to have 4 fields")
+      assert(names.length == 5, "java.lang.String is expected to have 5 fields")
       names
     }
 
@@ -1069,6 +1069,7 @@ object Lower {
         case StringOffsetName         => Val.Int(0)
         case StringCountName          => charsLength
         case StringCachedHashCodeName => Val.Int(stringHashCode(value))
+        case ObjectMonitorName        => Val.Null
         case _                        => util.unreachable
       }
 
@@ -1121,6 +1122,7 @@ object Lower {
   val StringCountName  = StringName.member(Sig.Field("count"))
   val StringCachedHashCodeName =
     StringName.member(Sig.Field("cachedHashCode"))
+  val ObjectMonitorName = Rt.Object.name.member(Sig.Field("__monitor"))
 
   val CharArrayName =
     Global.Top("scala.scalanative.runtime.CharArray")
@@ -1305,6 +1307,7 @@ object Lower {
     buf += StringOffsetName
     buf += StringCountName
     buf += StringCachedHashCodeName
+    buf += ObjectMonitorName
     buf += CharArrayName
     buf += BoxesRunTime
     buf += RuntimeBoxes

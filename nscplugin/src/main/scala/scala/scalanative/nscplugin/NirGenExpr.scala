@@ -1000,6 +1000,8 @@ trait NirGenExpr[G <: nsc.Global with Singleton] { self: NirGenPhase[G] =>
             genApplyBox(arg.tpe, arg)
           } else if (currentRun.runDefinitions.isUnbox(sym)) {
             genApplyUnbox(app.tpe, args.head)
+          } else if (PosixMonitorForwards contains sym.name) {
+            genApplyMonitor(app)
           } else {
             val Select(receiverp, _) = fun
             genApplyMethod(fun.symbol, statically = false, receiverp, args)
@@ -1784,6 +1786,10 @@ trait NirGenExpr[G <: nsc.Global with Singleton] { self: NirGenPhase[G] =>
       }
     }
 
+    def genGetMonitor(objectRef: Tree)(implicit pos: nir.Position): Val = {
+      genApplyModuleMethod(PosixMonitorModule, GetMonitorMethod, Seq(objectRef))
+    }
+
     def genSynchronized(receiverp: Tree, bodyp: Tree)(
         implicit pos: nir.Position): Val = {
       genSynchronized(receiverp)(_.genExpr(bodyp))
@@ -1791,19 +1797,37 @@ trait NirGenExpr[G <: nsc.Global with Singleton] { self: NirGenPhase[G] =>
 
     def genSynchronized(receiverp: Tree)(bodyGen: ExprBuffer => Val)(
         implicit pos: nir.Position): Val = {
-      val monitor =
-        genApplyModuleMethod(RuntimeModule, GetMonitorMethod, Seq(receiverp))
-      val enter = genApplyMethod(RuntimeMonitorEnterMethod,
+      val monitor = genGetMonitor(receiverp)
+      val enter = genApplyMethod(PosixMonitorEnterMethod,
                                  statically = true,
                                  monitor,
                                  Seq())
       val ret = bodyGen(this)
-      val exit = genApplyMethod(RuntimeMonitorExitMethod,
+      val exit = genApplyMethod(PosixMonitorExitMethod,
                                 statically = true,
                                 monitor,
                                 Seq())
 
       ret
+    }
+
+    def genApplyMonitor(app: Apply)(implicit pos: nir.Position): Val = {
+      val Apply(oldFun @ Select(receiverp, funName), args) = app
+      val monitor                                          = genGetMonitor(receiverp)
+      val newFun                                           = PosixMonitorClass.info.member(funName.mapName("_" + _))
+
+      val oldSignature = oldFun.tpe.params.map(_.tpe.sym.name)
+      val filtered = newFun.filter { alternative =>
+        val newSignature = alternative.tpe.params.map(_.tpe.sym.name)
+        newSignature == oldSignature
+      }
+
+      if (filtered.exists) {
+        genApplyMethod(filtered, statically = false, monitor, args)
+      } else {
+        val Select(receiverp, _) = oldFun
+        genApplyMethod(oldFun.symbol, statically = false, receiverp, args)
+      }
     }
 
     def genCoercion(app: Apply, receiver: Tree, code: Int): Val = {

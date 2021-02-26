@@ -10,6 +10,9 @@ object Rt {
   val Type    = StructValue(Seq(Int, Int, Ptr, Ptr))
   val Runtime = Ref(Global.Top("scala.scalanative.runtime.package$"))
 
+  val RuntimeEnvironment = Ref(
+    Global.Top("scala.scalanative.runtime.Environment$"))
+
   val BoxedPtr        = Ref(Global.Top("scala.scalanative.unsafe.Ptr"))
   val BoxedNull       = Ref(Global.Top("scala.runtime.Null$"))
   val BoxedUnit       = Ref(Global.Top("scala.runtime.BoxedUnit"))
@@ -39,6 +42,9 @@ object Rt {
   val GetRawTypeTy   = Function(Seq(Runtime, Object), Ptr)
   val GetRawTypeName = Global.Member(Runtime.name, GetRawTypeSig)
   val GetRawType     = Val.Global(GetRawTypeName, Ptr)
+
+  val ObjectName         = Object.name
+  val ObjectMonitorField = ObjectName member Sig.Field("__monitor")
 
   val StringName               = String.name
   val StringValueName          = StringName member Sig.Field("value")

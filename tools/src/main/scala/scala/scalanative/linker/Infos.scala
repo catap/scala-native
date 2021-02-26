@@ -212,11 +212,12 @@ final class Result(val infos: mutable.Map[Global, Info],
                    val defns: Seq[Defn],
                    val dynsigs: Seq[Sig],
                    val dynimpls: Seq[Global]) {
-  lazy val ObjectClass       = infos(Rt.Object.name).asInstanceOf[Class]
-  lazy val StringClass       = infos(Rt.StringName).asInstanceOf[Class]
-  lazy val StringValueField  = infos(Rt.StringValueName).asInstanceOf[Field]
-  lazy val StringOffsetField = infos(Rt.StringOffsetName).asInstanceOf[Field]
-  lazy val StringCountField  = infos(Rt.StringCountName).asInstanceOf[Field]
+  lazy val ObjectClass        = infos(Rt.ObjectName).asInstanceOf[Class]
+  lazy val ObjectMonitorField = infos(Rt.ObjectMonitorField).asInstanceOf[Field]
+  lazy val StringClass        = infos(Rt.StringName).asInstanceOf[Class]
+  lazy val StringValueField   = infos(Rt.StringValueName).asInstanceOf[Field]
+  lazy val StringOffsetField  = infos(Rt.StringOffsetName).asInstanceOf[Field]
+  lazy val StringCountField   = infos(Rt.StringCountName).asInstanceOf[Field]
   lazy val StringCachedHashCodeField = infos(Rt.StringCachedHashCodeName)
     .asInstanceOf[Field]
 }

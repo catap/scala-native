@@ -3,12 +3,14 @@ package java.lang
 import java.io.File
 import scala.scalanative.annotation.stub
 import scala.scalanative.libc.stdlib
+import scala.scalanative.libc.unistd
 
 class Runtime private () {
   import Runtime.ProcessBuilderOps
-  def availableProcessors(): Int = 1
-  def exit(status: Int): Unit    = stdlib.exit(status)
-  def gc(): Unit                 = ()
+  def availableProcessors(): Int =
+    unistd.sysconf(unistd.SC_NPROCESSORS_CONF).toInt
+  def exit(status: Int): Unit = stdlib.exit(status)
+  def gc(): Unit              = ()
 
   @stub
   def addShutdownHook(thread: java.lang.Thread): Unit = ???
